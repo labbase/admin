@@ -1,0 +1,27 @@
+# dependencies
+node_modules
+npm-debug.log
+
+# logs
+*.log
+
+# git
+.git
+.gitignore
+
+# docker
+Dockerfile
+.dockerignore
+
+# local env
+.env.development
+
+# misc
+README.md
+*.md
+
+# OS / editor
+.DS_Store
+.vscode
+.idea
+ nodemon.json
