@@ -6,3 +6,4 @@ dist
 build
 Dockerfile*
 docker-compose*
+/data
