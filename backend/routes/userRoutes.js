@@ -2,21 +2,22 @@ const express = require("express");
 const router = express.Router();
 
 const userController = require("../controllers/userController");
+const authMiddleware = require("../middleware/authMiddleware");
 
 // ✅ 전체 조회
-router.get("/", userController.getUsers);
+router.get("/", authMiddleware,userController.getUsers);
 
 // ✅ 특정 조회 (이건 반드시 아래!)
-router.get("/:id", userController.getUserById);
+router.get("/:id", authMiddleware, userController.getUserById);
 
 // ✅ 생성
-router.post("/", userController.createUser);
+router.post("/", authMiddleware, userController.createUser);
 
 // ✅ 수정
-router.put("/:id", userController.updateUser);
+router.put("/:id", authMiddleware, userController.updateUser);
 
 // ✅ 삭제
-router.delete("/:id", userController.deleteUser);
+router.delete("/:id", authMiddleware, userController.deleteUser);
 
 
 module.exports = router;
