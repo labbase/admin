@@ -1,4 +1,15 @@
 const userService = require("../services/userService");
+const bcrypt = require("bcrypt");
+
+const isStrongPassword = (password) => {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[^A-Za-z0-9]/.test(password)
+  );
+};
 
 const getUsers = async (req, res) => {
   try {
@@ -29,48 +40,96 @@ const getUserById = async (req, res) => {
 };
 
 const createUser = async (req, res) => {
+
   try {
-    const { name, email } = req.body;
+    const { name, email, password } = req.body;
 
     // ✅ validation (중요)
-    if (!name || !email) {
-      return res.status(400).json({ error: "name and email required" });
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "name, email and password required" });
+    }
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({
+        error: "Weak password"
+      });
     }
 
-    console.log("CREATE USER:", name, email);
+    // ✅ password hashing
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await userService.createUser(name, email, hashedPassword);
+    const { password: _, ...safeUser } = user;
+    res.status(201).json(safeUser);
 
-    const user = await userService.createUser(name, email);
 
-    res.status(201).json(user);
   } catch (err) {
     console.error("ERROR:", err);
     res.status(500).json({ error: "DB error" });
   }
 };
+
 
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email } = req.body;
+    const { name, email, password } = req.body;
 
-    // ✅ validation
+    // ✅ 1. 필수 값 체크 (password 제외)
     if (!name || !email) {
-      return res.status(400).json({ error: "name and email required" });
+      return res.status(400).json({
+        error: "name and email required",
+      });
     }
-    console.log("UPDATE USER:", id, name, email);
-    const user = await userService.updateUser(id, name, email);
 
-    // ✅ 없는 경우
+    // ✅ 2. password가 있을 때만 strength 검사
+    if (password && !isStrongPassword(password)) {
+      return res.status(400).json({
+        error: "Weak password",
+      });
+    }
+
+    let user;
+
+    // ✅ 3. password 있는 경우
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      user = await userService.updateUser(
+        id,
+        name,
+        email,
+        hashedPassword
+      );
+    } 
+    // ✅ 4. password 없는 경우 (기존 유지)
+    else {
+      user = await userService.updateUser(
+        id,
+        name,
+        email,
+        null
+      );
+    }
+
+    // ✅ 5. 유저 없는 경우
     if (!user) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({
+        error: "User not found",
+      });
     }
 
-    res.json(user);
+    // ✅ 6. password 제거 후 응답
+    const { password: _, ...safeUser } = user;
+
+    res.json(safeUser);
+
   } catch (err) {
     console.error("ERROR:", err);
-    res.status(500).json({ error: "DB error" });
+    res.status(500).json({
+      error: "DB error",
+    });
   }
 };
+
 
 const deleteUser = async (req, res) => {
   try {
@@ -83,7 +142,6 @@ const deleteUser = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
     
-    console.log("DELETE USER:", user);
     res.json({
       message: "User deleted",
       user,

@@ -1,28 +1,42 @@
 "use client";
-
+import { authFetch } from "../lib/authFetch";
 import { useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 
 export default function Home() {
-  
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("")
+
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  // 비밀번호 정책
+  const isStrongPassword = (password) => {
+    return (
+      password.length >= 8 &&
+      /[A-Z]/.test(password) &&  // 대문자
+      /[a-z]/.test(password) &&  // 소문자
+      /[0-9]/.test(password) &&  // 숫자
+      /[^A-Za-z0-9]/.test(password) // 특수문자
+    );
+  };
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
+  const [editPassword, setEditPassword] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
 
   const [search, setSearch] = useState("");
-  const filteredUsers = users.filter((u) =>
-    u.name.toLowerCase().includes(search.toLowerCase())
-  );
+  
+  const filteredUsers = Array.isArray(users)
+    ? users.filter((u) =>
+        u.name.toLowerCase().includes(search.toLowerCase())
+      )
+    : []; // users가 배열인지 확인 후 필터링
 
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -36,24 +50,44 @@ export default function Home() {
   const API_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001/api";
 
+
+
   // ✅ 조회 함수
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/users`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await authFetch(`${API_URL}/users`);
+      if (!res) return; // 세션 만료 시 return
+
+      if(!res.ok) {
+        throw new Error("Fetch failed");
+      }
+
       const data = await res.json();
-      setUsers(data);
+
+      setUsers(Array.isArray(data) ? data : []); // API가 배열을 반환하는지 확인
       setLoading(false);
     } catch (err) {
       toast.error("Something went wrong");
+      setUsers([]); // 에러 시 빈 배열로 초기화
       setLoading(false);
     }
   };
 
+
+
+  // ✅ 로그인 체크 (맨 위)
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login";
+    } else{
+      setCheckingAuth(false);
+    }
+  }, []);
+
+
+
+  // ✅ 데이터 fetch + 1분마다 갱신
   useEffect(() => {
     fetchUsers();
 
@@ -61,32 +95,46 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+
+
+  // ✅ 로그아웃 함수
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+  };
+
+
+
   // ✅ POST (추가)
   const addUser = async () => {
-    if (!name || !email) {
-      toast.error("이름과 이메일 입력");
+  
+    // 비밀번호 정책 체크
+    if (!name || !email || !password) {
+      toast.error("name, email and password required");
+      return;
+    }
+    if (!isStrongPassword(password)) {
+      toast.error("password must be at least 8 characters long and include uppercase, lowercase, number, special character and min length 8");
       return;
     }
 
     try {
       setActionLoading(true);
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/users`, {
+      const res = await authFetch(`${API_URL}/users`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-           Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ name, email }),
+        body: JSON.stringify({ name, email, password, }),
       });
+      if(!res) return; // 세션 만료 시 return
 
       if (!res.ok) {
         throw new Error("Failed to add user");
       }
+
       setName("");
       setEmail("");
       toast.success("User added!"); 
       fetchUsers();
+
     } catch (err) {
       toast.error("Something went wrong");
     } finally {
@@ -95,20 +143,29 @@ export default function Home() {
   };
 
 
+
   // ✅ DELETE (삭제) 
   const deleteUser = async (id) => {
     const ok = confirm("정말 삭제할까요?");
     if (!ok) return;
-      const token = localStorage.getItem("token");
-    await fetch(`${API_URL}/users/${id}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    toast.success("User deleted!");
-    fetchUsers();
+
+    try {
+      const res = await authFetch(`${API_URL}/users/${id}`, {
+          method: "DELETE",
+        });
+      if(!res) return; // 세션 만료 시 return
+      
+      if (!res.ok) {
+        throw new Error("Failed to delete user");
+      }
+
+      toast.success("User deleted!");
+      fetchUsers();
+    } catch (err) {
+      toast.error("Something went wrong");
+    }
   };
+
 
 
  // ✅ PUT (편집)
@@ -116,200 +173,199 @@ export default function Home() {
     setEditingId(user.id);
     setEditName(user.name);
     setEditEmail(user.email);
+    setEditPassword("");
   };
+
 
   const updateUser = async (id) => {
-    const token = localStorage.getItem("token");
-    
-    await fetch(`${API_URL}/users/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        name: editName,
-        email: editEmail,
-      }),
-    });
-    toast.success("User updated!");
-    setEditingId(null);
-    fetchUsers();
-  };
 
-  // ✅ Login
-  const handleLogin = async () => {
-  try {
-    const res = await fetch(`${API_URL}/auth/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: loginEmail,
-        password: loginPassword,
-      }),
-    });
+    // 비밀번호 정책 체크
+    if (editPassword && !isStrongPassword(editPassword)) {
+      toast.error("password must be at least 8 characters long and include uppercase, lowercase, number, and special character");
+      return;
+    }
 
-  const data = await res.json();
-    if (!res.ok) {
-        throw new Error(data.error);
+    try {
+      const res = await authFetch(`${API_URL}/users/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: editName,
+          email: editEmail,
+          password: editPassword,
+        }),
+      });
+
+      if (!res) return;
+
+      if (!res.ok) {
+        throw new Error("Update failed");
       }
 
-      // 토큰 저장
-      localStorage.setItem("token", data.token);
-
-      toast.success("Login success!");
+      toast.success("User updated!");
+      setEditingId(null);
+      fetchUsers();
     } catch (err) {
-      toast.error("Login failed");
+      toast.error("Something went wrong");
     }
   };
 
+
+
+  if (checkingAuth) {
+    return <p>Checking auth...</p>;
+  }
+
   return (
-  
-  <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-2xl mx-auto">
 
-    <div className="mb-6 border p-4 rounded">
-      <h2 className="mb-2 font-bold">Login</h2>
+      <Toaster />
 
-      <input
-        placeholder="Email"
-        value={loginEmail}
-        onChange={(e) => setLoginEmail(e.target.value)}
-        className="border p-2 w-full mb-2"
-      />
-
-      <input
-        placeholder="Password"
-        type="password"
-        value={loginPassword}
-        onChange={(e) => setLoginPassword(e.target.value)}
-        className="border p-2 w-full mb-2"
-      />
-
+      <div className="flex justify-between items-center mb-6">
+      <h1 className="text-2xl font-bold">🛠️ Admin Console</h1>    
       <button
-        onClick={handleLogin}
-        className="bg-black text-white px-4 py-2 rounded"
+        onClick={handleLogout}
+        className="bg-red-500 text-white px-3 py-1 rounded"
       >
-        Login
+        Logout
       </button>
-    </div>
+      </div>
 
-    <Toaster />
-    <h1 className="text-2xl font-bold mb-6">🛠️ Admin Console</h1>
 
-    {/* ✅ Search Bar and Form */}
-    <input
-      placeholder="Search users..."
-      value={search}
-      onChange={(e) => setSearch(e.target.value)}
-      className="border p-2 rounded w-full mb-4"
-    />
-    <div className="flex gap-2 mb-6">
+
+      {/* ✅ Search Bar and Form */}
       <input
-        className="border p-2 rounded flex-1"
-        placeholder="Name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
+        placeholder="Search users..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="border p-2 rounded w-full mb-4"
       />
-      <input
-        className="border p-2 rounded flex-1"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <button
-        onClick={addUser}
-        disabled={actionLoading}
-        className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
-      >
-        {actionLoading ? "..." : "Add"}
-      </button>
-    </div>
-
-    {/* ✅ User Table */}
-    {loading ? (
-      <p className="text-gray-500">Loading...</p>
-    ) : users.length === 0 ? (
-      <p className="text-gray-400">No users found</p>
-    ) : (
-        <table className="w-full border rounded">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="p-2">ID</th>
-              <th className="p-2">Name</th>
-              <th className="p-2">Email</th>
-              <th className="p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedUsers.map((user) => (
-              <tr key={user.id} className="border-t">
-                <td className="p-2">{user.id}</td>
-                <td className="p-2">{user.name}</td>
-                <td className="p-2">{user.email}</td>
-                <td className="p-2 space-x-2">
-                  <button onClick={() => startEdit(user)}>✏️</button>
-                  <button onClick={() => deleteUser(user.id)}>❌</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-    )}
-
-    {/* ✅ Pagination */}
-    <div className="flex justify-center gap-2 mt-4">
-      {Array.from({ length: totalPages }, (_, i) => (
+      <div className="flex gap-2 mb-6">
+        <input
+          className="border p-2 rounded flex-1"
+          placeholder="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className="border p-2 rounded flex-1"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <input
+          type="password"
+          className="border p-2 rounded flex-1"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
         <button
-          key={i}
-          onClick={() => setPage(i + 1)}
-          className={`px-3 py-1 border rounded ${
-            page === i + 1 ? "bg-blue-500 text-white" : ""
-          }`}
+          onClick={addUser}
+          disabled={actionLoading}
+          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
         >
-          {i + 1}
+          {actionLoading ? "..." : "Add"}
         </button>
-      ))}
-    </div>
+      </div>
 
 
-    {/* ✅ Edit Users */}    
-    {editingId && (
-      <div className="fixed inset-0 bg-black/30 flex items-center justify-center">
-        <div className="bg-white p-4 rounded w-80">
-          <h2 className="text-lg mb-3">Edit User</h2>
 
-          <input
-            className="border p-2 w-full mb-2"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-          />
+      {/* ✅ User Table */}
+      {loading ? (
+        <p className="text-gray-500">Loading...</p>
+      ) : users.length === 0 ? (
+        <p className="text-gray-400">No users found</p>
+      ) : (
+          <table className="w-full border rounded">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-2">ID</th>
+                <th className="p-2">Name</th>
+                <th className="p-2">Email</th>
+                <th className="p-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedUsers.map((user) => (
+                <tr key={user.id} className="border-t">
+                  <td className="p-2">{user.id}</td>
+                  <td className="p-2">{user.name}</td>
+                  <td className="p-2">{user.email}</td>
+                  <td className="p-2 space-x-2">
+                    <button onClick={() => startEdit(user)}>✏️</button>
+                    <button onClick={() => deleteUser(user.id)}>❌</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+      )}
 
-          <input
-            className="border p-2 w-full mb-2"
-            value={editEmail}
-            onChange={(e) => setEditEmail(e.target.value)}
-          />
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => updateUser(editingId)}
-              className="bg-green-500 text-white px-3 py-1 rounded"
-            >
-              Save
-            </button>
 
-            <button
-              onClick={() => setEditingId(null)}
-              className="bg-gray-400 text-white px-3 py-1 rounded"
-            >
-              Cancel
-            </button>
+      {/* ✅ Pagination */}
+      <div className="flex justify-center gap-2 mt-4">
+        {Array.from({ length: totalPages }, (_, i) => (
+          <button
+            key={i}
+            onClick={() => setPage(i + 1)}
+            className={`px-3 py-1 border rounded ${
+              page === i + 1 ? "bg-blue-500 text-white" : ""
+            }`}
+          >
+            {i + 1}
+          </button>
+        ))}
+      </div>
+
+
+
+      {/* ✅ Edit Users */}    
+      {editingId && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center">
+          <div className="bg-white p-4 rounded w-80">
+            <h2 className="text-lg mb-3">Edit User</h2>
+
+            <input
+              className="border p-2 w-full mb-2"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+            />
+
+            <input
+              className="border p-2 w-full mb-2"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+            />        
+            <input
+              type="password"
+              className="border p-2 w-full mb-2"
+              placeholder="New password"
+              value={editPassword}
+              onChange={(e) => setEditPassword(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => updateUser(editingId)}
+                className="bg-green-500 text-white px-3 py-1 rounded"
+              >
+                Save
+              </button>
+
+              <button
+                onClick={() => setEditingId(null)}
+                className="bg-gray-400 text-white px-3 py-1 rounded"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-  </div>
+      )}
+
+
+
+
+    </div>
 );
 }
