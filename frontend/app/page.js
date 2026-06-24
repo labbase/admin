@@ -20,6 +20,7 @@ export default function Home() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -50,13 +51,50 @@ export default function Home() {
   const API_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001/api";
 
+  // ✅ 로그인 체크 (맨 위)
+  useEffect(() => {
+    
+    if (window.location.pathname === "/login") {
+        setCheckingAuth(false);
+        return;
+      }
 
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      window.location.replace = "/login";
+      return;
+    }
+
+    setIsAuthenticated(true);
+    setCheckingAuth(false);
+  }, []);
+
+  // ✅ 사용자 조회 (맨 아래)
+  useEffect(() => {
+    if (checkingAuth || !isAuthenticated) return;
+
+    fetchUsers();
+  }, [checkingAuth, isAuthenticated]);
+
+  // ✅ checkingAuth 상태에 따른 로딩 표시
+  if (checkingAuth) {
+      return <p>Loading...</p>; // checkingAuth가 true일 때 로딩 표시
+    }
 
   // ✅ 조회 함수
   const fetchUsers = async () => {
     try {
+      console.log("fetchUsers 실행");
       const res = await authFetch(`${API_URL}/users`);
-      if (!res) return; // 세션 만료 시 return
+      
+      if (!res) {
+        console.log("res 없음 (authFetch 문제)");
+        window.location.href = "/login";
+        return;
+      }
+
+      console.log("응답 status:", res.status);
 
       if(!res.ok) {
         throw new Error("Fetch failed");
@@ -64,36 +102,17 @@ export default function Home() {
 
       const data = await res.json();
 
+      console.log("data:", data);
+
       setUsers(Array.isArray(data) ? data : []); // API가 배열을 반환하는지 확인
       setLoading(false);
     } catch (err) {
+      console.error("fetch error:", err);
       toast.error("Something went wrong");
       setUsers([]); // 에러 시 빈 배열로 초기화
       setLoading(false);
     }
   };
-
-
-
-  // ✅ 로그인 체크 (맨 위)
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/login";
-    } else{
-      setCheckingAuth(false);
-    }
-  }, []);
-
-
-
-  // ✅ 데이터 fetch + 1분마다 갱신
-  useEffect(() => {
-    fetchUsers();
-
-    const interval = setInterval(fetchUsers, 60000);
-    return () => clearInterval(interval);
-  }, []);
 
 
 
@@ -176,7 +195,7 @@ export default function Home() {
     setEditPassword("");
   };
 
-
+// ✅ PUT (편집)
   const updateUser = async (id) => {
 
     // 비밀번호 정책 체크
@@ -209,12 +228,7 @@ export default function Home() {
     }
   };
 
-
-
-  if (checkingAuth) {
-    return <p>Checking auth...</p>;
-  }
-
+  // ✅ 렌더링
   return (
     <div className="p-6 max-w-2xl mx-auto">
 
@@ -269,38 +283,36 @@ export default function Home() {
       </div>
 
 
-
-      {/* ✅ User Table */}
-      {loading ? (
-        <p className="text-gray-500">Loading...</p>
-      ) : users.length === 0 ? (
+      {/* ✅ User Table 항상 유지 */}
+      {users.length === 0 ? (
         <p className="text-gray-400">No users found</p>
       ) : (
-          <table className="w-full border rounded">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="p-2">ID</th>
-                <th className="p-2">Name</th>
-                <th className="p-2">Email</th>
-                <th className="p-2">Actions</th>
+        <table className="w-full border rounded">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="p-2">ID</th>
+              <th className="p-2">Name</th>
+              <th className="p-2">Email</th>
+              <th className="p-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedUsers.map((user) => (
+              <tr key={user.id} className="border-t">
+                <td className="p-2">{user.id}</td>
+                <td className="p-2">{user.name}</td>
+                <td className="p-2">{user.email}</td>
+                <td className="p-2 space-x-2">
+                  <button onClick={() => startEdit(user)}>✏️</button>
+                  <button onClick={() => deleteUser(user.id)}>❌</button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {paginatedUsers.map((user) => (
-                <tr key={user.id} className="border-t">
-                  <td className="p-2">{user.id}</td>
-                  <td className="p-2">{user.name}</td>
-                  <td className="p-2">{user.email}</td>
-                  <td className="p-2 space-x-2">
-                    <button onClick={() => startEdit(user)}>✏️</button>
-                    <button onClick={() => deleteUser(user.id)}>❌</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+          </tbody>
+        </table>
       )}
-
+      {/* ✅ loading은 따로 표시 */}
+      {loading && <p className="text-gray-500 mt-2">Updating...</p>}
 
 
       {/* ✅ Pagination */}

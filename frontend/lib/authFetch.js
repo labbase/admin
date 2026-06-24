@@ -13,7 +13,6 @@ export const authFetch = async (url, options = {}) => {
   // ✅ 핵심: 세션 만료 처리
   if (res.status === 401) {
     localStorage.removeItem("token");
-    window.location.href = "/login";
     return null;
   }
 
