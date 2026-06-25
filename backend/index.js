@@ -5,6 +5,7 @@ require("dotenv").config({
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const cookieParser = require("cookie-parser");
 const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const app = express();
@@ -20,6 +21,8 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 }));
+
+app.use(cookieParser());
 
 app.options("*", cors());
 app.use(express.json());

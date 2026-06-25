@@ -13,6 +13,8 @@ export default function LoginPage() {
   const API_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001/api";
 
+
+
   // ✅ 로그인 처리
   const handleLogin = async () => {
     try {
@@ -27,15 +29,14 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) throw new Error();
-      
-    // ✅ token 저장
-    localStorage.setItem("token", data.token);
+      // Save the token in a cookie
+      document.cookie = `token=${data.token}; path=/`;
 
-    toast.success("Login success!");
+      toast.success("Login success!");
 
-    // Redirect to home page after a short delay
-    setTimeout(() => {
-      window.location.href = "/";
+      // Redirect to home page after a short delay
+      setTimeout(() => {
+        window.location.href = "/";
     }, 100);
 
     } catch (err) {
@@ -80,21 +81,25 @@ const handleForgot = async () => {
       },
       body: JSON.stringify({
         email,
-        password,
       }),
     });
 
     if (!res.ok) throw new Error();
 
-    toast.success("Password updated!");
-    setMode("login");
+    toast.success("Reset email sent!");
 
   } catch {
-    toast.error("Reset failed");
+    toast.error("Failed to send email");
   }
 };
 
- return (
+const handleLogout = () => {
+  document.cookie = "token=; path=/; max-age=0";
+  window.location.href = "/login";
+};
+
+
+return (
   <div className="p-6 max-w-sm mx-auto">
     <Toaster />
 
@@ -115,7 +120,7 @@ const handleForgot = async () => {
       />
     )}
 
-    {/* ✅ 공통 input */}
+    {/* ✅ email은 모든 모드에서 사용 */}
     <input
       placeholder="Email"
       className="border p-2 w-full mb-2"
@@ -123,13 +128,16 @@ const handleForgot = async () => {
       onChange={(e) => setEmail(e.target.value)}
     />
 
-    <input
-      placeholder="Password"
-      type="password"
-      className="border p-2 w-full mb-2"
-      value={password}
-      onChange={(e) => setPassword(e.target.value)}
-    />
+    {/* ✅ password는 login + register에서만 */}
+    {(mode === "login" || mode === "register") && (
+      <input
+        placeholder="Password"
+        type="password"
+        className="border p-2 w-full mb-2"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+    )}
 
     {/* ✅ 버튼 */}
     <button
@@ -144,10 +152,10 @@ const handleForgot = async () => {
     >
       {mode === "login" && "Login"}
       {mode === "register" && "Register"}
-      {mode === "forgot" && "Reset"}
+      {mode === "forgot" && "Send Reset Email"}
     </button>
 
-    {/* ✅ 하단 전환 버튼 */}
+    {/* ✅ 하단 전환 */}
     <div className="flex justify-between mt-3 text-sm text-blue-500">
 
       {mode !== "login" && (
@@ -171,6 +179,5 @@ const handleForgot = async () => {
     </div>
   </div>
 );
-
 
 }

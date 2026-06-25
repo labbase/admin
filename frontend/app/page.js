@@ -5,7 +5,6 @@ import toast, { Toaster } from "react-hot-toast";
 
 export default function Home() {
 
-  const [checkingAuth, setCheckingAuth] = useState(true);
   // 비밀번호 정책
   const isStrongPassword = (password) => {
     return (
@@ -20,7 +19,6 @@ export default function Home() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -51,41 +49,17 @@ export default function Home() {
   const API_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001/api";
 
-  // ✅ 로그인 체크 (맨 위)
-  useEffect(() => {
-    
-    if (window.location.pathname === "/login") {
-        setCheckingAuth(false);
-        return;
-      }
-
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      window.location.replace = "/login";
-      return;
-    }
-
-    setIsAuthenticated(true);
-    setCheckingAuth(false);
-  }, []);
 
   // ✅ 사용자 조회 (맨 아래)
   useEffect(() => {
-    if (checkingAuth || !isAuthenticated) return;
-
     fetchUsers();
-  }, [checkingAuth, isAuthenticated]);
+  }, []);
 
-  // ✅ checkingAuth 상태에 따른 로딩 표시
-  if (checkingAuth) {
-      return <p>Loading...</p>; // checkingAuth가 true일 때 로딩 표시
-    }
+ 
 
   // ✅ 조회 함수
   const fetchUsers = async () => {
     try {
-      console.log("fetchUsers 실행");
       const res = await authFetch(`${API_URL}/users`);
       
       if (!res) {
@@ -94,15 +68,11 @@ export default function Home() {
         return;
       }
 
-      console.log("응답 status:", res.status);
-
       if(!res.ok) {
         throw new Error("Fetch failed");
       }
 
       const data = await res.json();
-
-      console.log("data:", data);
 
       setUsers(Array.isArray(data) ? data : []); // API가 배열을 반환하는지 확인
       setLoading(false);
@@ -118,7 +88,7 @@ export default function Home() {
 
   // ✅ 로그아웃 함수
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    document.cookie = "token=; path=/; max-age=0";
     window.location.href = "/login";
   };
 
