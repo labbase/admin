@@ -2,6 +2,7 @@
 import { authFetch } from "../lib/authFetch";
 import { useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
+import { useRef } from "react";
 
 export default function Home() {
 
@@ -49,13 +50,16 @@ export default function Home() {
   const API_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001/api";
 
+  const didFetch = useRef(false);
 
-  // ✅ 사용자 조회 (맨 아래)
   useEffect(() => {
+    if (didFetch.current) return; // ✅ 두 번째 실행 방지
+    didFetch.current = true;
+
     fetchUsers();
   }, []);
 
- 
+
 
   // ✅ 조회 함수
   const fetchUsers = async () => {
@@ -63,8 +67,6 @@ export default function Home() {
       const res = await authFetch(`${API_URL}/users`);
       
       if (!res) {
-        console.log("res 없음 (authFetch 문제)");
-        window.location.href = "/login";
         return;
       }
 
@@ -80,19 +82,19 @@ export default function Home() {
       console.error("fetch error:", err);
       toast.error("Something went wrong");
       setUsers([]); // 에러 시 빈 배열로 초기화
-      setLoading(false);
+      setLoading(true); // 로딩 상태를 true로 유지
     }
   };
 
+  // ✅ 로그아웃
+  const handleLogout = async () => {
+    await fetch(`${API_URL}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
 
-
-  // ✅ 로그아웃 함수
-  const handleLogout = () => {
-    document.cookie = "token=; path=/; max-age=0";
     window.location.href = "/login";
   };
-
-
 
   // ✅ POST (추가)
   const addUser = async () => {
@@ -111,6 +113,9 @@ export default function Home() {
       setActionLoading(true);
       const res = await authFetch(`${API_URL}/users`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ name, email, password, }),
       });
       if(!res) return; // 세션 만료 시 return
@@ -177,6 +182,9 @@ export default function Home() {
     try {
       const res = await authFetch(`${API_URL}/users/${id}`, {
         method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           name: editName,
           email: editEmail,

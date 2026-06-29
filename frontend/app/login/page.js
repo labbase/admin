@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -13,6 +15,16 @@ export default function LoginPage() {
   const API_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001/api";
 
+      // 비밀번호 정책
+  const isStrongPassword = (password) => {
+    return (
+      password.length >= 8 &&
+      /[A-Z]/.test(password) &&  // 대문자
+      /[a-z]/.test(password) &&  // 소문자
+      /[0-9]/.test(password) &&  // 숫자
+      /[^A-Za-z0-9]/.test(password) // 특수문자
+    );
+  };
 
 
   // ✅ 로그인 처리
@@ -24,20 +36,13 @@ export default function LoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
+        credentials: "include", // 🔥 쿠키를 포함하도록 설정
       });
 
-      const data = await res.json();
-
       if (!res.ok) throw new Error();
-      // Save the token in a cookie
-      document.cookie = `token=${data.token}; path=/`;
 
       toast.success("Login success!");
-
-      // Redirect to home page after a short delay
-      setTimeout(() => {
-        window.location.href = "/";
-    }, 100);
+      router.push("/"); // ✅ 로그인 성공하면 홈으로 이동
 
     } catch (err) {
       toast.error("Login failed");
@@ -46,6 +51,17 @@ export default function LoginPage() {
 
 
 const handleRegister = async () => {
+    
+    // 비밀번호 정책 체크
+    if (!name || !email || !password) {
+      toast.error("name, email and password required");
+      return;
+    }
+    if (!isStrongPassword(password)) {
+      toast.error("password must be at least 8 characters long and include uppercase, lowercase, number, special character and min length 8");
+      return;
+    }
+
   try {
     const res = await fetch(`${API_URL}/auth/register`, {
       method: "POST",
@@ -59,7 +75,7 @@ const handleRegister = async () => {
       }),
     });
 
-    const data = await res.json();
+
 
     if (!res.ok) throw new Error(data.error);
 
@@ -93,10 +109,6 @@ const handleForgot = async () => {
   }
 };
 
-const handleLogout = () => {
-  document.cookie = "token=; path=/; max-age=0";
-  window.location.href = "/login";
-};
 
 
 return (

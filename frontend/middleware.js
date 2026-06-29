@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 
 export function middleware(req) {
   const { pathname } = req.nextUrl;
-  const token = req.cookies.get("token")?.value;
+
+  // ✅ accessToken 가져오기
+  const token = req.cookies.get("accessToken")?.value;
 
   // ✅ Next 내부 파일 & API 제외
   if (
@@ -15,20 +17,21 @@ export function middleware(req) {
 
   // ✅ public pages
   const publicPaths = ["/login", "/reset"];
-
   const isPublic = publicPaths.some((path) =>
     pathname.startsWith(path)
   );
 
+  // ✅ 로그인 페이지 처리
   if (isPublic) {
+    // 로그인 상태면 /login 못 들어가게
+    if (token && pathname === "/login") {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+
     return NextResponse.next();
   }
 
-  // ✅ auth check
-  if (!token) {
-    return NextResponse.redirect(new URL("/login", req.url));
-  }
-
+  // ✅ 방법 C: access 없어도 통과
   return NextResponse.next();
 }
 

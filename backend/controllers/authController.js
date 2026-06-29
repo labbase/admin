@@ -5,7 +5,6 @@ const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const BASE_URL = process.env.BASE_URL;
 
-
 // ✅ LOGIN
 const login = async (req, res) => {
   const { email, password } = req.body;
@@ -17,7 +16,7 @@ const login = async (req, res) => {
     );
 
     const user = result.rows[0];
-    // ✅ user 체크 먼저
+
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -28,14 +27,36 @@ const login = async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // ✅ JWT 생성
-    const token = jwt.sign(
+    // ✅ access token (짧게)
+    const accessToken = jwt.sign(
       { id: user.id, email: user.email },
       "secretkey",
-      { expiresIn: "8h" } 
+      { expiresIn: "15m" }
     );
 
-    res.json({ token });
+    // ✅ refresh token (길게)
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      "refresh_secret",
+      { expiresIn: "7d" }
+    );
+
+    // ✅ cookie 저장
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+    });
+
+    res.json({ message: "Login successful" });
 
   } catch (err) {
     console.error(err);
@@ -43,13 +64,49 @@ const login = async (req, res) => {
   }
 };
 
+// ✅ ✅ ✅ NEW: REFRESH TOKEN API
+const refresh = (req, res) => {
+  const token = req.cookies.refreshToken;
 
-// ✅ REGISTER (Create User)
+  if (!token) {
+    return res.status(401).json({ error: "No refresh token" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, "refresh_secret");
+
+    const newAccessToken = jwt.sign(
+      { id: decoded.id },
+      "secretkey",
+      { expiresIn: "15m" }
+    );
+
+    res.cookie("accessToken", newAccessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+    });
+
+    res.json({ message: "Token refreshed" });
+
+  } catch {
+    return res.status(401).json({ error: "Invalid refresh token" });
+  }
+};
+
+// ✅ LOGOUT
+const logout = (req, res) => {
+  res.clearCookie("accessToken", { path: "/" });
+  res.clearCookie("refreshToken", { path: "/" });
+
+  res.json({ message: "Logged out" });
+};
+
+// ✅ REGISTER
 const register = async (req, res) => {
   const { name, email, password } = req.body;
 
   try {
-    // 중복 체크
     const existing = await pool.query(
       "SELECT * FROM users WHERE email = $1",
       [email]
@@ -77,7 +134,7 @@ const register = async (req, res) => {
   }
 };
 
-// ✅ FORGOT PASSWORD
+// ✅ FORGOT
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
 
@@ -93,17 +150,14 @@ const forgotPassword = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // ✅ 토큰 생성
     const token = crypto.randomBytes(32).toString("hex");
-
-    const expiry = new Date(Date.now() + 1000 * 60 * 15); // 15분
+    const expiry = new Date(Date.now() + 1000 * 60 * 15);
 
     await pool.query(
       "UPDATE users SET reset_token=$1, reset_token_expiry=$2 WHERE email=$3",
       [token, expiry, email]
     );
 
-    // ✅ email 설정
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -113,7 +167,6 @@ const forgotPassword = async (req, res) => {
     });
 
     const resetLink = `${BASE_URL}/reset?token=${token}`;
-
 
     await transporter.sendMail({
       to: email,
@@ -130,17 +183,16 @@ const forgotPassword = async (req, res) => {
   }
 };
 
-// ✅ RESET PASSWORD
+// ✅ RESET
 const resetPassword = async (req, res) => {
   const { token, password } = req.body;
 
   try {
-    console.log("받은 token:", token);
     const result = await pool.query(
       "SELECT * FROM users WHERE reset_token=$1 AND reset_token_expiry > NOW()",
       [token]
     );
-    console.log("DB 조회 결과:", result.rows);
+
     const user = result.rows[0];
 
     if (!user) {
@@ -162,4 +214,11 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { login, register, forgotPassword, resetPassword };
+module.exports = {
+  login,
+  refresh,   // ✅ 중요
+  logout,
+  register,
+  forgotPassword,
+  resetPassword,
+};

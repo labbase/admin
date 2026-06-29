@@ -26,7 +26,7 @@ app.use(cookieParser());
 
 app.options("*", cors());
 app.use(express.json());
-
+// app.set("trust proxy", 1);
 // ✅ health check
 app.get("/", (req, res) => {
   res.send("Backend running");
